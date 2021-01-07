@@ -287,6 +287,9 @@ typedef struct _heaptypeobject {
     PyObject *ht_name, *ht_slots, *ht_qualname;
     struct _dictkeysobject *ht_cached_keys;
     PyObject *ht_module;
+    PyTypeObject *ht_hidden_class;
+    int ht_hidden_class_counter;
+
     /* here are optional user slots, followed by the members. */
 } PyHeapTypeObject;
 

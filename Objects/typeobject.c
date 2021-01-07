@@ -993,6 +993,87 @@ type_repr(PyTypeObject *type)
     return rtn;
 }
 
+static int
+maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
+{
+    assert(et->ht_hidden_class_counter >= 0);
+    et->ht_hidden_class_counter++;
+    if (et->ht_hidden_class_counter < 10) {  // TODO
+        return 0;
+    }
+
+    // TODO: Skip if the class already has __slots__
+    // TODO: Skip if the class overrides __getattribute__ or __setattr__
+
+    // Get and validate the object's __dict__
+
+    PyObject **dictptr = _PyObject_GetDictPtr(obj);
+    if (dictptr == NULL)
+        goto never_again;
+
+    PyObject *dict = *dictptr;  // Borrowed, but owned by obj
+    dictptr = NULL;  // No longer needed
+    if (dict == NULL || !PyDict_CheckExact(dict))
+        goto never_again;
+
+    // Create a tuple for __slots__ and fill it from dict
+
+    ssize_t dsize = PyDict_GET_SIZE(dict);
+    if (dsize == 0 || dsize > 10)  // TODO
+        goto never_again;
+
+    // TODO: Maybe set ht_hidden_class_counter = -1 on errors?
+
+    PyObject *diter = PyObject_GetIter(dict);
+    dict = NULL;  // We don't need it any more
+    if (diter == NULL)
+        return -1;
+
+    PyObject *slots = PyTuple_New(dsize + 1);  // +1 for "__dict__" slot
+    if (slots < 0) {
+        Py_DECREF(diter);
+        return -1;
+    }
+    PyObject *dunder = _PyUnicode_FromId(&PyId___dict__);
+    if (dunder == NULL) {
+        Py_DECREF(diter);
+        Py_DECREF(slots);
+        return -1;
+    }
+    Py_INCREF(dunder);
+    PyTuple_SetItem(slots, 0, dunder);
+    dunder = NULL;  // It's now owned by slots
+
+    for (ssize_t i = 0; i < dsize; i++) {
+        PyObject *key = PyIter_Next(diter);
+        if (key == NULL || !PyUnicode_CheckExact(key)) {
+            Py_DECREF(diter);
+            Py_DECREF(slots);
+            Py_XDECREF(key);
+            return -1;
+        }
+        PyTuple_SetItem(slots, i + 1, key);
+        Py_DECREF(key);
+    }
+    Py_CLEAR(diter);
+
+    // Next, create a class -- this is equivalent to
+    // class C__(C):
+    //     __slots__ = ("__dict__", "x", "y", "z")
+    // Where C is the class (et) and x, y, z are the dict keys
+
+    fprintf(stderr, "Created tuple of %zd slots for %s\n", dsize + 1, Py_TYPE(obj)->tp_name);;
+    goto never_again;
+
+    return 0;
+
+  never_again:
+    fprintf(stderr, "Never again for %s\n", Py_TYPE(obj)->tp_name);
+    et->ht_hidden_class_counter = -1;  // Never do this again
+    return 0;
+
+}
+
 static PyObject *
 type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
@@ -1036,6 +1117,14 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    if (_PyType_HasFeature(type, Py_TPFLAGS_HEAPTYPE)) {
+        PyHeapTypeObject *et = (PyHeapTypeObject *)type;
+        if (et->ht_hidden_class != NULL) {
+            fprintf(stderr, "Using hidden class for %s\n", type->tp_name);
+            type = et->ht_hidden_class;
+        }
+    }
+
     obj = type->tp_new(type, args, kwds);
     obj = _Py_CheckFunctionResult(tstate, (PyObject*)type, obj, NULL);
     if (obj == NULL)
@@ -1058,6 +1147,19 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
             assert(!_PyErr_Occurred(tstate));
         }
     }
+
+    if ( Py_TYPE(type) == &PyType_Type && _PyType_HasFeature(type, Py_TPFLAGS_HEAPTYPE)) {
+        PyHeapTypeObject *et = (PyHeapTypeObject *)type;
+        if (et->ht_hidden_class == NULL && et->ht_hidden_class_counter >= 0) {
+            fprintf(stderr, "Maybe creating hidden class for %s\n", type->tp_name);
+            if (maybe_make_hidden_class(et, obj) < 0) {
+                fprintf(stderr, "Oops!\n");
+                Py_DECREF(obj);
+                obj = NULL;
+            }
+        }
+    }
+
     return obj;
 }
 
@@ -2703,6 +2805,10 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
 
     /* Set ht_module */
     et->ht_module = NULL;
+
+    /* Set ht_hidden_class and friends */
+    et->ht_hidden_class = NULL;
+    et->ht_hidden_class_counter = 0;
 
     /* Set tp_doc to a copy of dict['__doc__'], if the latter is there
        and is a string.  The __doc__ accessor will first look for tp_doc;
