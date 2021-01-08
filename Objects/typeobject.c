@@ -996,38 +996,58 @@ type_repr(PyTypeObject *type)
 static int
 maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
 {
+    // TODO: Be less fprintf()-happy
+    // TODO: Should we check the qualifying conditions before or after the counter?
     assert(et->ht_hidden_class_counter >= 0);
     et->ht_hidden_class_counter++;
-    if (et->ht_hidden_class_counter < 100) {  // TODO: tweak the number
+    if (et->ht_hidden_class_counter < 10) {  // TODO: tweak the number
         return 0;
     }
 
-    // Skip if the class already has __slots__
-    if (PyObject_HasAttrString((PyObject *)et, "__slots__"))
+    PyTypeObject *type = Py_TYPE(obj);
+    if (type != (PyTypeObject *)et) {
+        // TODO: This would be an error condition -- abort() instead?
+        fprintf(stderr, "et %p != type %p\n", et, type);
+        fprintf(stderr, "et %s != type %s\n", ((PyTypeObject *)et)->tp_name, type->tp_name);
         goto nevermore;
+    }
 
-    // TODO: Skip if the class overrides __getattribute__ or __setattr__
+    // Skip if the class already has __slots__?  (Those will get slower.)
+
+    // Skip variable size types
+    if (type->tp_itemsize > 0) {
+        fprintf(stderr, "Variable size type %s\n", type->tp_name);
+        goto nevermore;
+    }
+
+    // TODO: Skip if the class overrides __getattribute__ or __setattr__?
 
     // Get and validate the object's __dict__
 
     PyObject **dictptr = _PyObject_GetDictPtr(obj);
-    if (dictptr == NULL)
+    if (dictptr == NULL) {
+        fprintf(stderr, "No __dict__ ptr %s\n", type->tp_name);
         goto nevermore;
+    }
 
     PyObject *dict = *dictptr;  // Borrowed, but owned by obj
     dictptr = NULL;  // No longer needed
-    if (dict == NULL || !PyDict_CheckExact(dict))
+    if (dict == NULL || !PyDict_CheckExact(dict)) {
+        fprintf(stderr, "No __dict__ or not a true dict %s\n", type->tp_name);
         goto nevermore;
+    }
 
     // Create a tuple for __slots__ and fill it from dict
 
     ssize_t dsize = PyDict_GET_SIZE(dict);
-    if (dsize == 0 || dsize > 5)  // TODO: tweak the number
+    if (dsize == 0 || dsize > 10) { // TODO: tweak the number
+        fprintf(stderr, "No slots or too many slots %s\n", type->tp_name);
         goto nevermore;
+    }
 
-    fprintf(stderr, "Really going to create a hidden class for %s\n", Py_TYPE(obj)->tp_name);
+    fprintf(stderr, "Really going to create a hidden class for %s\n", type->tp_name);
 
-    // TODO: Maybe set ht_hidden_class_counter = -1 on errors?
+    // TODO: Maybe set et->ht_hidden_class_counter = -1 on errors?
 
     PyObject *diter = PyObject_GetIter(dict);
     dict = NULL;  // We don't need it any more
@@ -1052,15 +1072,15 @@ maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
         Py_DECREF(key);
     }
     Py_CLEAR(diter);
-    fprintf(stderr, "Created tuple of %zd slots for %s\n", dsize + 1, Py_TYPE(obj)->tp_name);
+    fprintf(stderr, "Created tuple of %zd slots for %s\n", dsize, type->tp_name);
 
     // Next, create a class.  This is roughly equivalent to:
     // class C__(C):
     //     __slots__ = (x", "y", "z")
     // IOW: type('C__', (C,), {"__slots__": (x", "y", "z")})
 
-    PyObject *name = PyUnicode_FromFormat("%s__", Py_TYPE(obj)->tp_name);
-    PyObject *bases = Py_BuildValue("(O)", Py_TYPE(obj));
+    PyObject *name = PyUnicode_FromFormat("%s__", type->tp_name);
+    PyObject *bases = Py_BuildValue("(O)", type);
     PyObject *namespace = Py_BuildValue("{sO}", "__slots__", slots);
     if (name == NULL || bases == NULL || namespace == NULL) {
         // TODO: Refactor so fail jumps go down
@@ -1079,7 +1099,12 @@ maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
         Py_DECREF(args);
         goto fail;
     }
+    if (PyType_HasFeature(new_type, Py_TPFLAGS_HEAPTYPE)) {
+        // Prevent creating a hidden class for a hidden class
+        ((PyHeapTypeObject *)new_type)->ht_hidden_class_counter = -1;
+    }
     et->ht_hidden_class = new_type;
+
     fprintf(stderr, "Success! %s\n", new_type->tp_name);
 
     Py_DECREF(args);
@@ -1090,7 +1115,7 @@ maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
     return 0;
 
   nevermore:
-    fprintf(stderr, "Never again for %s\n", Py_TYPE(obj)->tp_name);
+    fprintf(stderr, "Never again for %s\n", type->tp_name);
     et->ht_hidden_class_counter = -1;  // Never do this again
     return 0;
 
