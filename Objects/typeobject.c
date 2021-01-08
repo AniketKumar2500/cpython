@@ -998,29 +998,34 @@ maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
 {
     assert(et->ht_hidden_class_counter >= 0);
     et->ht_hidden_class_counter++;
-    if (et->ht_hidden_class_counter < 10) {  // TODO
+    if (et->ht_hidden_class_counter < 100) {  // TODO: tweak the number
         return 0;
     }
 
-    // TODO: Skip if the class already has __slots__
+    // Skip if the class already has __slots__
+    if (PyObject_HasAttrString((PyObject *)et, "__slots__"))
+        goto nevermore;
+
     // TODO: Skip if the class overrides __getattribute__ or __setattr__
 
     // Get and validate the object's __dict__
 
     PyObject **dictptr = _PyObject_GetDictPtr(obj);
     if (dictptr == NULL)
-        goto never_again;
+        goto nevermore;
 
     PyObject *dict = *dictptr;  // Borrowed, but owned by obj
     dictptr = NULL;  // No longer needed
     if (dict == NULL || !PyDict_CheckExact(dict))
-        goto never_again;
+        goto nevermore;
 
     // Create a tuple for __slots__ and fill it from dict
 
     ssize_t dsize = PyDict_GET_SIZE(dict);
-    if (dsize == 0 || dsize > 10)  // TODO
-        goto never_again;
+    if (dsize == 0 || dsize > 5)  // TODO: tweak the number
+        goto nevermore;
+
+    fprintf(stderr, "Really going to create a hidden class for %s\n", Py_TYPE(obj)->tp_name);
 
     // TODO: Maybe set ht_hidden_class_counter = -1 on errors?
 
@@ -1029,20 +1034,11 @@ maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
     if (diter == NULL)
         return -1;
 
-    PyObject *slots = PyTuple_New(dsize + 1);  // +1 for "__dict__" slot
+    PyObject *slots = PyTuple_New(dsize);
     if (slots < 0) {
         Py_DECREF(diter);
         return -1;
     }
-    PyObject *dunder = _PyUnicode_FromId(&PyId___dict__);
-    if (dunder == NULL) {
-        Py_DECREF(diter);
-        Py_DECREF(slots);
-        return -1;
-    }
-    Py_INCREF(dunder);
-    PyTuple_SetItem(slots, 0, dunder);
-    dunder = NULL;  // It's now owned by slots
 
     for (ssize_t i = 0; i < dsize; i++) {
         PyObject *key = PyIter_Next(diter);
@@ -1052,22 +1048,48 @@ maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
             Py_XDECREF(key);
             return -1;
         }
-        PyTuple_SetItem(slots, i + 1, key);
+        PyTuple_SetItem(slots, i, key);
         Py_DECREF(key);
     }
     Py_CLEAR(diter);
+    fprintf(stderr, "Created tuple of %zd slots for %s\n", dsize + 1, Py_TYPE(obj)->tp_name);
 
-    // Next, create a class -- this is equivalent to
+    // Next, create a class.  This is roughly equivalent to:
     // class C__(C):
-    //     __slots__ = ("__dict__", "x", "y", "z")
-    // Where C is the class (et) and x, y, z are the dict keys
+    //     __slots__ = (x", "y", "z")
+    // IOW: type('C__', (C,), {"__slots__": (x", "y", "z")})
 
-    fprintf(stderr, "Created tuple of %zd slots for %s\n", dsize + 1, Py_TYPE(obj)->tp_name);;
-    goto never_again;
+    PyObject *name = PyUnicode_FromFormat("%s__", Py_TYPE(obj)->tp_name);
+    PyObject *bases = Py_BuildValue("(O)", Py_TYPE(obj));
+    PyObject *namespace = Py_BuildValue("{sO}", "__slots__", slots);
+    if (name == NULL || bases == NULL || namespace == NULL) {
+        // TODO: Refactor so fail jumps go down
+  fail:
+        Py_XDECREF(name);
+        Py_XDECREF(bases);
+        Py_XDECREF(namespace);
+        return -1;
+    }
+    PyObject *args = Py_BuildValue("(OOO)", name, bases, namespace);
+    if (args == NULL)
+        goto fail;
+    PyTypeObject *new_type = (PyTypeObject *) (PyType_Type.tp_call((PyObject *)&PyType_Type, args, NULL));
+    if (new_type == NULL) {
+        fprintf(stderr, "Nah, failed at %s\n", PyUnicode_AsUTF8(name));
+        Py_DECREF(args);
+        goto fail;
+    }
+    et->ht_hidden_class = new_type;
+    fprintf(stderr, "Success! %s\n", new_type->tp_name);
+
+    Py_DECREF(args);
+    Py_XDECREF(name);
+    Py_XDECREF(bases);
+    Py_XDECREF(namespace);
 
     return 0;
 
-  never_again:
+  nevermore:
     fprintf(stderr, "Never again for %s\n", Py_TYPE(obj)->tp_name);
     et->ht_hidden_class_counter = -1;  // Never do this again
     return 0;
