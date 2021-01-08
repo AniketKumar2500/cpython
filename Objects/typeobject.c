@@ -1011,6 +1011,7 @@ maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
         fprintf(stderr, "et %s != type %s\n", ((PyTypeObject *)et)->tp_name, type->tp_name);
         goto nevermore;
     }
+    fprintf(stderr, "Maybe creating hidden class for %s\n", type->tp_name);
 
     // Skip if the class already has __slots__?  (Those will get slower.)
 
@@ -1032,8 +1033,12 @@ maybe_make_hidden_class(PyHeapTypeObject *et, PyObject *obj)
 
     PyObject *dict = *dictptr;  // Borrowed, but owned by obj
     dictptr = NULL;  // No longer needed
-    if (dict == NULL || !PyDict_CheckExact(dict)) {
-        fprintf(stderr, "No __dict__ or not a true dict %s\n", type->tp_name);
+    if (dict == NULL) {
+        fprintf(stderr, "No __dict__%s\n", type->tp_name);
+        goto nevermore;
+    }
+    if (!PyDict_CheckExact(dict)) {
+        fprintf(stderr, "Not a true dict %s\n", type->tp_name);
         goto nevermore;
     }
 
@@ -1167,7 +1172,7 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (_PyType_HasFeature(type, Py_TPFLAGS_HEAPTYPE)) {
         PyHeapTypeObject *et = (PyHeapTypeObject *)type;
         if (et->ht_hidden_class != NULL) {
-            fprintf(stderr, "Using hidden class for %s\n", type->tp_name);
+            // fprintf(stderr, "Using hidden class for %s\n", type->tp_name);
             type = et->ht_hidden_class;
         }
     }
@@ -1195,10 +1200,13 @@ type_call(PyTypeObject *type, PyObject *args, PyObject *kwds)
         }
     }
 
-    if ( Py_TYPE(type) == &PyType_Type && _PyType_HasFeature(type, Py_TPFLAGS_HEAPTYPE)) {
+    static int check = -1;
+    if (check < 0) {
+        check = getenv("PYTHONHIDDENCLASS") && *getenv("PYTHONHIDDENCLASS") != '\0';
+    }
+    if (check && Py_TYPE(type) == &PyType_Type && _PyType_HasFeature(type, Py_TPFLAGS_HEAPTYPE)) {
         PyHeapTypeObject *et = (PyHeapTypeObject *)type;
         if (et->ht_hidden_class == NULL && et->ht_hidden_class_counter >= 0) {
-            fprintf(stderr, "Maybe creating hidden class for %s\n", type->tp_name);
             if (maybe_make_hidden_class(et, obj) < 0) {
                 fprintf(stderr, "Oops!\n");
                 Py_DECREF(obj);
