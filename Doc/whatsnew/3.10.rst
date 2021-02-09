@@ -193,7 +193,13 @@ Type hints can now be written in a more succinct manner::
        return number ** 2
 
 
-See :pep:`604` for more details.
+This new syntax is also accepted as the second argument to :func:`isinstance`
+and :func:`issubclass`::
+
+   >>> isinstance(1, int | str)
+   True
+
+See :ref:`types-union` and :pep:`604` for more details.
 
 (Contributed by Maggie Moss and Philippe Prados in :issue:`41428`.)
 
@@ -410,6 +416,10 @@ Added :func:`os.splice()` that allows to move data between two file
 descriptors without copying between kernel address space and user
 address space, where one of the file descriptors must refer to a
 pipe. (Contributed by Pablo Galindo in :issue:`41625`.)
+
+Added :data:`~os.O_EVTONLY`, :data:`~os.O_FSYNC`, :data:`~os.O_SYMLINK`
+and :data:`~os.O_NOFOLLOW_ANY` for macOS.
+(Contributed by Dong-hee Na in :issue:`43106`.)
 
 pathlib
 -------
