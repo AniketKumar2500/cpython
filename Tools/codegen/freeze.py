@@ -10,8 +10,11 @@ parser.add_argument("file")
 
 def make_string_literal(b: bytes) -> str:
     res = ['"']
-    for i in b:
-        res.append(f"\\x{i:02x}")
+    if b.isascii() and b.decode("ascii").isprintable():
+        res.append(b.decode("ascii"))
+    else:
+        for i in b:
+            res.append(f"\\x{i:02x}")
     res.append('"')
     return "".join(res)
 
@@ -56,17 +59,40 @@ class Printer:
         self.write(f".{name} = {getattr(obj, name)},")
 
     def generate_bytes(self, name: str, b: bytes) -> None:
-        with self.block(f"struct {name}_type", ";"):
-            self.write("PyObject_VAR_HEAD")
-            self.write("Py_hash_t ob_shash;")
-            self.write(f"char ob_sval[{len(b) + 1}];")
-        with self.block(f"struct {name}_type {name} =", ";"):
+        self.write("static")
+        with self.indent():
+            with self.block(f"struct"):
+                self.write("PyObject_VAR_HEAD")
+                self.write("Py_hash_t ob_shash;")
+                self.write(f"char ob_sval[{len(b) + 1}];")
+        with self.block(f"{name} =", ";"):
             self.object_var_head("PyBytes_Type", len(b) + 1)
             self.write(".ob_shash = -1,")
             self.write(f".ob_sval = {make_string_literal(b)},")
 
+    def generate_unicode(self, name: str, s: str) -> None:
+        b = s.encode("utf8", errors="surrogatepass")
+        assert len(s) == len(b)  # Can't handle non-ASCII names yet
+        with self.block(f"static PyUnicodeObject {name} =", ";"):
+            # PyCompactUnicodeObject
+            with self.block("._base =", ","):
+                # PyASCIIObject
+                with self.block("._base =", ","):
+                    self.object_head("PyUnicode_Type")
+                    self.write(f".length = {len(s)},")
+                    self.write(".hash = -1,")
+                    # state
+                    with self.block(".state =", ","):
+                        self.write(".kind = 1,")  # 8 bit chars
+                        self.write(".compact = 1,")  # ASCII
+                        self.write(".ready = 1,")
+                self.write(f".utf8_length = {len(b)},")
+                self.write(f".utf8 = {make_string_literal(b)},")
+                self.write(f".wstr_length = {len(s)},")
+
     def generate_code(self, name: str, code: types.CodeType) -> None:
-        self.generate_bytes(name + "_co_code", code.co_code)
+        self.generate_bytes(name + "_code", code.co_code)
+        self.generate_unicode(name + "_name", code.co_name)
         with self.block(f"struct PyCodeObject {name} =", ";"):
             self.object_head("PyCode_Type")
             self.field(code, "co_flags")
@@ -75,14 +101,15 @@ class Printer:
             self.field(code, "co_kwonlyargcount")
             self.field(code, "co_stacksize")
             self.field(code, "co_firstlineno")
-            self.write(f".co_code = (PyObject *) &{name + '_co_code'},")
+            self.write(f".co_code = (PyObject *) &{name + '_code'},")
+            self.write(f".co_name = (PyObject *) &{name + '_name'},")
 
 def generate(filename: str, file: typing.TextIO) -> None:
     with open(filename) as f:
         source = f.read()
     code = compile(source, filename, "exec")
     printer = Printer(file)
-    printer.generate_code("code", code)
+    printer.generate_code("toplevel", code)
 
 def main() -> None:
     args = parser.parse_args()
