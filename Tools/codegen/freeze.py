@@ -11,12 +11,7 @@ parser.add_argument("file")
 def make_string_literal(b: bytes) -> str:
     res = ['"']
     for i in b:
-        if 0 <= i < 32 or 127 <= i < 256:
-            res.append(f"\\x{i:02x}")
-        elif 32 <= i < 127:
-            res.append(chr(i))
-        else:
-            assert False, f"byte {i} out of range"
+        res.append(f"\\x{i:02x}")
     res.append('"')
     return "".join(res)
 
@@ -80,14 +75,14 @@ class Printer:
             self.field(code, "co_kwonlyargcount")
             self.field(code, "co_stacksize")
             self.field(code, "co_firstlineno")
-            self.write(f".co_code = &{name + '_co_code'},")
+            self.write(f".co_code = (PyObject *) &{name + '_co_code'},")
 
 def generate(filename: str, file: typing.TextIO) -> None:
     with open(filename) as f:
         source = f.read()
     code = compile(source, filename, "exec")
     printer = Printer(file)
-    printer.generate_code("main", code)
+    printer.generate_code("code", code)
 
 def main() -> None:
     args = parser.parse_args()
