@@ -3574,14 +3574,14 @@
         }
 
         TARGET(LOAD_FAST__LOAD_FAST) {
-            PyObject *_tmp_1;
             PyObject *_tmp_2;
+            PyObject *_tmp_1;
             {
                 PyObject *value;
                 value = GETLOCAL(oparg);
                 assert(value != NULL);
                 Py_INCREF(value);
-                _tmp_1 = value;
+                _tmp_2 = value;
             }
             NEXTOPARG();
             next_instr++;
@@ -3590,23 +3590,23 @@
                 value = GETLOCAL(oparg);
                 assert(value != NULL);
                 Py_INCREF(value);
-                _tmp_2 = value;
+                _tmp_1 = value;
             }
             STACK_GROW(2);
-            POKE(1, _tmp_2);
-            POKE(2, _tmp_1);
+            POKE(1, _tmp_1);
+            POKE(2, _tmp_2);
             DISPATCH();
         }
 
         TARGET(LOAD_FAST__LOAD_CONST) {
-            PyObject *_tmp_1;
             PyObject *_tmp_2;
+            PyObject *_tmp_1;
             {
                 PyObject *value;
                 value = GETLOCAL(oparg);
                 assert(value != NULL);
                 Py_INCREF(value);
-                _tmp_1 = value;
+                _tmp_2 = value;
             }
             NEXTOPARG();
             next_instr++;
@@ -3614,11 +3614,11 @@
                 PyObject *value;
                 value = GETITEM(consts, oparg);
                 Py_INCREF(value);
-                _tmp_2 = value;
+                _tmp_1 = value;
             }
             STACK_GROW(2);
-            POKE(1, _tmp_2);
-            POKE(2, _tmp_1);
+            POKE(1, _tmp_1);
+            POKE(2, _tmp_2);
             DISPATCH();
         }
 
@@ -3642,16 +3642,16 @@
         }
 
         TARGET(STORE_FAST__STORE_FAST) {
-            PyObject *_tmp_1 = PEEK(2);
-            PyObject *_tmp_2 = PEEK(1);
+            PyObject *_tmp_2 = PEEK(2);
+            PyObject *_tmp_1 = PEEK(1);
             {
-                PyObject *value = _tmp_2;
+                PyObject *value = _tmp_1;
                 SETLOCAL(oparg, value);
             }
             NEXTOPARG();
             next_instr++;
             {
-                PyObject *value = _tmp_1;
+                PyObject *value = _tmp_2;
                 SETLOCAL(oparg, value);
             }
             STACK_SHRINK(2);
@@ -3659,13 +3659,13 @@
         }
 
         TARGET(LOAD_CONST__LOAD_FAST) {
-            PyObject *_tmp_1;
             PyObject *_tmp_2;
+            PyObject *_tmp_1;
             {
                 PyObject *value;
                 value = GETITEM(consts, oparg);
                 Py_INCREF(value);
-                _tmp_1 = value;
+                _tmp_2 = value;
             }
             NEXTOPARG();
             next_instr++;
@@ -3674,20 +3674,20 @@
                 value = GETLOCAL(oparg);
                 assert(value != NULL);
                 Py_INCREF(value);
-                _tmp_2 = value;
+                _tmp_1 = value;
             }
             STACK_GROW(2);
-            POKE(1, _tmp_2);
-            POKE(2, _tmp_1);
+            POKE(1, _tmp_1);
+            POKE(2, _tmp_2);
             DISPATCH();
         }
 
         TARGET(BINARY_OP_INPLACE_ADD_UNICODE) {
-            PyObject *_tmp_1 = PEEK(2);
-            PyObject *_tmp_2 = PEEK(1);
+            PyObject *_tmp_2 = PEEK(2);
+            PyObject *_tmp_1 = PEEK(1);
             {
-                PyObject *right = _tmp_2;
-                PyObject *left = _tmp_1;
+                PyObject *right = _tmp_1;
+                PyObject *left = _tmp_2;
                 assert(cframe.use_tracing == 0);
                 DEOPT_IF(!PyUnicode_CheckExact(left), BINARY_OP);
                 DEOPT_IF(Py_TYPE(right) != Py_TYPE(left), BINARY_OP);
@@ -3725,11 +3725,11 @@
         }
 
         TARGET(COMPARE_OP_FLOAT_JUMP) {
-            PyObject *_tmp_1 = PEEK(2);
-            PyObject *_tmp_2 = PEEK(1);
+            PyObject *_tmp_2 = PEEK(2);
+            PyObject *_tmp_1 = PEEK(1);
             {
-                PyObject *right = _tmp_2;
-                PyObject *left = _tmp_1;
+                PyObject *right = _tmp_1;
+                PyObject *left = _tmp_2;
                 size_t jump;
                 uint16_t when_to_jump_mask = read_u16(next_instr + 1);
                 assert(cframe.use_tracing == 0);
@@ -3746,13 +3746,13 @@
                 _Py_DECREF_SPECIALIZED(left, _PyFloat_ExactDealloc);
                 _Py_DECREF_SPECIALIZED(right, _PyFloat_ExactDealloc);
                 jump = sign_ish & when_to_jump_mask;
-                _tmp_1 = (PyObject *)jump;
+                _tmp_2 = (PyObject *)jump;
             }
             next_instr += 2;
             NEXTOPARG();
             next_instr++;
             {
-                size_t jump = (size_t)_tmp_1;
+                size_t jump = (size_t)_tmp_2;
                 assert(opcode == POP_JUMP_IF_FALSE || opcode == POP_JUMP_IF_TRUE);
                 if (jump) {
                     JUMPBY(oparg);
@@ -3763,11 +3763,11 @@
         }
 
         TARGET(COMPARE_OP_INT_JUMP) {
-            PyObject *_tmp_1 = PEEK(2);
-            PyObject *_tmp_2 = PEEK(1);
+            PyObject *_tmp_2 = PEEK(2);
+            PyObject *_tmp_1 = PEEK(1);
             {
-                PyObject *right = _tmp_2;
-                PyObject *left = _tmp_1;
+                PyObject *right = _tmp_1;
+                PyObject *left = _tmp_2;
                 size_t jump;
                 uint16_t when_to_jump_mask = read_u16(next_instr + 1);
                 assert(cframe.use_tracing == 0);
@@ -3785,13 +3785,13 @@
                 _Py_DECREF_SPECIALIZED(left, (destructor)PyObject_Free);
                 _Py_DECREF_SPECIALIZED(right, (destructor)PyObject_Free);
                 jump = sign_ish & when_to_jump_mask;
-                _tmp_1 = (PyObject *)jump;
+                _tmp_2 = (PyObject *)jump;
             }
             next_instr += 2;
             NEXTOPARG();
             next_instr++;
             {
-                size_t jump = (size_t)_tmp_1;
+                size_t jump = (size_t)_tmp_2;
                 assert(opcode == POP_JUMP_IF_FALSE || opcode == POP_JUMP_IF_TRUE);
                 if (jump) {
                     JUMPBY(oparg);
@@ -3802,11 +3802,11 @@
         }
 
         TARGET(COMPARE_OP_STR_JUMP) {
-            PyObject *_tmp_1 = PEEK(2);
-            PyObject *_tmp_2 = PEEK(1);
+            PyObject *_tmp_2 = PEEK(2);
+            PyObject *_tmp_1 = PEEK(1);
             {
-                PyObject *right = _tmp_2;
-                PyObject *left = _tmp_1;
+                PyObject *right = _tmp_1;
+                PyObject *left = _tmp_2;
                 size_t jump;
                 uint16_t invert = read_u16(next_instr + 1);
                 assert(cframe.use_tracing == 0);
@@ -3821,13 +3821,13 @@
                 assert(res == 0 || res == 1);
                 assert(invert == 0 || invert == 1);
                 jump = res ^ invert;
-                _tmp_1 = (PyObject *)jump;
+                _tmp_2 = (PyObject *)jump;
             }
             next_instr += 2;
             NEXTOPARG();
             next_instr++;
             {
-                size_t jump = (size_t)_tmp_1;
+                size_t jump = (size_t)_tmp_2;
                 assert(opcode == POP_JUMP_IF_FALSE || opcode == POP_JUMP_IF_TRUE);
                 if (jump) {
                     JUMPBY(oparg);
@@ -3838,14 +3838,14 @@
         }
 
         TARGET(END_FOR) {
-            PyObject *_tmp_1 = PEEK(2);
-            PyObject *_tmp_2 = PEEK(1);
+            PyObject *_tmp_2 = PEEK(2);
+            PyObject *_tmp_1 = PEEK(1);
             {
-                PyObject *value = _tmp_2;
+                PyObject *value = _tmp_1;
                 Py_DECREF(value);
             }
             {
-                PyObject *value = _tmp_1;
+                PyObject *value = _tmp_2;
                 Py_DECREF(value);
             }
             STACK_SHRINK(2);
